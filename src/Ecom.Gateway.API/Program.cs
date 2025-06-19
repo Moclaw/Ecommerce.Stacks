@@ -21,14 +21,33 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Add Health Checks with dependencies
-builder.Services
-    .AddHealthChecks()
+var healthChecks = builder.Services.AddHealthChecks()
     .AddCheck(
         "self",
         () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy()
-    )
-    .AddUrlGroup(new Uri("http://ecom.core.api:8080/health"), "core-api")
-    .AddUrlGroup(new Uri("http://ecom.users.api:8080/health"), "users-api");
+    );
+
+// Add service health checks only in production or if services are available
+if (!builder.Environment.IsDevelopment())
+{
+    healthChecks
+        .AddUrlGroup(new Uri("http://ecom.core.api:8080/health"), "core-api", tags: new[] { "services" })
+        .AddUrlGroup(new Uri("http://ecom.users.api:8080/health"), "users-api", tags: new[] { "services" });
+}
+else
+{
+    // In development, try to connect to local services if available
+    try
+    {
+        healthChecks
+            .AddUrlGroup(new Uri("http://localhost:5001/health"), "core-api-local", tags: new[] { "services" })
+            .AddUrlGroup(new Uri("http://localhost:5002/health"), "users-api-local", tags: new[] { "services" });
+    }
+    catch (Exception ex)
+    {
+        Log.Warning("Could not add service health checks: {Message}", ex.Message);
+    }
+}
 
 // Add HTTP client
 builder.Services.AddHttpClient();
@@ -95,7 +114,8 @@ app.MapReverseProxy();
 
 try
 {
-    Log.Information("Starting Ecommerce Gateway API on port 8080");
+    var urls = app.Configuration["ASPNETCORE_URLS"] ?? "http://localhost:5000;https://localhost:5001";
+    Log.Information("Starting Ecommerce Gateway API with URLs: {Urls}", urls);
     app.Run();
 }
 catch (Exception ex)

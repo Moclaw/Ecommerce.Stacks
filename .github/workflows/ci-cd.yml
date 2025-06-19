@@ -57,12 +57,11 @@ jobs:
       with:
         name: build-artifacts
         path: ./artifacts/
-
   # ==========================================
-  # DOCKER BUILD & DEPLOY
+  # .NET DEPLOY JOB
   # ==========================================
   deploy-development:
-    name: 'Build & Deploy to Development'
+    name: 'Deploy to Development'
     runs-on: self-hosted
     needs: build-and-test
     
@@ -70,8 +69,16 @@ jobs:
     - name: 'Checkout Code'
       uses: actions/checkout@v4
 
-    - name: 'Set up Docker Buildx'
-      uses: docker/setup-buildx-action@v3
+    - name: 'Setup .NET'
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: 'Download Build Artifacts'
+      uses: actions/download-artifact@v4
+      with:
+        name: build-artifacts
+        path: ./artifacts/
 
     - name: 'Setup Environment'
       run: |
@@ -81,30 +88,23 @@ jobs:
         # Ensure logs directory exists
         mkdir -p ./src/Ecom.Gateway.API/logs
 
-    - name: 'Deploy with Docker Compose'
-      run: |
-        # Stop existing containers
-        docker-compose down --remove-orphans
+    - name: 'Run .NET Application'
+      run: |        # Kill any existing process on the ports
+        powershell -Command "Get-NetTCPConnection -LocalPort 5000,5001 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
         
-        # Build and start services
-        docker-compose up -d --build
+        # Start the .NET application in the background
+        cd ./artifacts/gateway
+        powershell -Command "Start-Process -FilePath './Ecom.Gateway.API.exe' -NoNewWindow"
         
-        # Wait for services to be ready
-        echo "Waiting for services to start..."
-        sleep 30
+        # Wait for application to start
+        echo "Waiting for the application to start..."
+        sleep 10
 
     - name: 'Health Check'
       run: |
-        # Check if all services are running
-        docker-compose ps
-        
         # Wait for gateway to be healthy
         echo "Checking gateway health..."
-        timeout 120 bash -c 'until curl -f http://localhost:5000/health 2>/dev/null; do echo "Waiting for gateway..."; sleep 5; done' || echo "Gateway health check timeout"
-        
-        # Check database connections
-        docker-compose exec -T postgres pg_isready -U ecommerce_user -d ecommerce_db || echo "PostgreSQL not ready"
-        docker-compose exec -T redis redis-cli ping || echo "Redis not ready"
+        timeout 60 bash -c 'until curl -f http://localhost:5000/health 2>/dev/null; do echo "Waiting for gateway..."; sleep 5; done' || echo "Gateway health check timeout"
 
     - name: 'Show Service URLs'
       run: |
@@ -113,14 +113,6 @@ jobs:
         echo "📋 Service URLs:"
         echo "  • API Gateway: http://localhost:5000"
         echo "  • Swagger UI: http://localhost:5000/swagger"
-        echo "  • Adminer (PostgreSQL): http://localhost:8081"
-        echo "  • Mongo Express: http://localhost:8082"
-        echo "  • Redis Commander: http://localhost:8083"
-        echo "  • Kafka UI: http://localhost:8080"
-        echo ""
-        echo "📊 Service Status:"
-        docker-compose ps --format "table {{.Name}}\t{{.State}}\t{{.Ports}}"
-
   # ==========================================
   # CLEANUP JOB
   # ==========================================
@@ -131,13 +123,10 @@ jobs:
     if: always()
     
     steps:
-    - name: 'Clean Docker System'
+    - name: 'Stop .NET Application'
       run: |
-        # Remove unused Docker resources
-        docker system prune -f --volumes
-        
-        # Remove old images (keep latest 3)
-        docker images --format "table {{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.CreatedAt}}" | grep ${{ env.APP_NAME }} | tail -n +4 | awk '{print $2}' | xargs -r docker rmi || true
+        # Stop any running .NET application on ports 5000 and 5001
+        powershell -Command "Get-NetTCPConnection -LocalPort 5000,5001 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }"
 
     - name: 'Archive Logs'
       run: |

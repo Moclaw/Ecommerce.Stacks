@@ -18,12 +18,6 @@ Dự án này cung cấp một stack đầy đủ cho hệ thống ecommerce v�
 - **Apache Kafka** - Message Broker & Event Streaming (latest)
 - **LocalStack** - AWS Services Emulator (latest)
 
-### Management Tools
-- **Adminer** - PostgreSQL Database Management
-- **Mongo Express** - MongoDB Management Interface
-- **Redis Commander** - Redis Management Tool
-- **Kafka UI** - Kafka Cluster Management
-
 ### Supporting Services
 - **Zookeeper** - Kafka Coordination Service
 
@@ -85,10 +79,6 @@ Sau khi start thành công, bạn có thể truy cập các giao diện quản l
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
-| **Adminer** (PostgreSQL) | http://localhost:8081 | Server: `postgres`, User: `ecommerce_user` |
-| **Mongo Express** | http://localhost:8082 | User: `admin`, Pass: `admin_password` |
-| **Redis Commander** | http://localhost:8083 | Password: `redis_password` |
-| **Kafka UI** | http://localhost:8080 | No auth required |
 | **LocalStack** | http://localhost:4566 | AWS CLI endpoint |
 
 ## 🔌 Service Endpoints
