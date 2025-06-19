@@ -1,0 +1,19 @@
+### Gateway API Tests
+
+### Get Gateway Info
+GET http://localhost:5300/api/gateway/info
+
+### Health Check
+GET http://localhost:5300/health
+
+### Test Core API via Gateway
+GET http://localhost:5300/api/core/health
+
+### Test Users API via Gateway  
+GET http://localhost:5300/api/users/health
+
+### Test Gateway Swagger UI
+GET http://localhost:5300/swagger
+
+### Test Gateway OpenAPI
+GET http://localhost:5300/swagger/v1/swagger.json

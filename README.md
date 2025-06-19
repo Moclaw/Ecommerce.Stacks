@@ -1,10 +1,17 @@
 # 🛒 Ecommerce Stacks - Microservices Infrastructure
 
-Dự án này cung cấp một stack đầy đủ cho hệ thống ecommerce với các công nghệ hiện đại sử dụng Docker Compose.
+Dự án này cung cấp một stack đầy đủ cho hệ thống ecommerce với các công nghệ hiện đại sử dụng Docker Compose và .NET Core API Gateway.
 
 ## 🏗️ Tech Stack
 
-### Core Services
+### Backend Services
+
+- **API Gateway** - .NET 9.0 with YARP (Yet Another Reverse Proxy)
+- **JWT Authentication** - Security layer cho API Gateway
+- **Serilog** - Structured logging framework
+
+### Core Infrastructure Services
+
 - **PostgreSQL** - Relational Database (latest)
 - **MongoDB** - NoSQL Database (latest)  
 - **Redis** - In-Memory Cache & Session Store (latest)
@@ -129,15 +136,56 @@ aws configure set output json
 
 ```
 Ecommerce.Stacks/
-├── docker-compose.yml     # Service definitions
-├── .env                   # Environment variables
-├── README.md             # Documentation
-└── data/                 # Persistent data (auto-created)
+├── docker-compose.yml          # Service definitions
+├── .env                        # Environment variables
+├── README.md                   # Documentation
+├── Ecommerce.Stacks.sln       # .NET Solution file
+├── src/                       # Source code
+│   └── Ecom.Gateway.API/      # API Gateway (.NET 9.0)
+│       ├── Controllers/       # API Controllers
+│       ├── Properties/        # Project properties
+│       ├── appsettings.json   # Configuration
+│       ├── Program.cs         # Application entry point
+│       ├── Dockerfile         # Docker image definition
+│       └── logs/             # Application logs
+└── data/                     # Persistent data (auto-created)
     ├── postgres/
     ├── mongo/
     ├── redis/
     ├── kafka/
     └── localstack/
+```
+
+## 🚀 API Gateway
+
+The project includes a .NET 9.0 API Gateway built with:
+
+- **YARP (Yet Another Reverse Proxy)** - For reverse proxy functionality
+- **JWT Bearer Authentication** - For securing API endpoints
+- **Serilog** - For structured logging
+- **Health Checks** - For monitoring service health
+- **Swagger/OpenAPI** - For API documentation
+
+### Gateway Endpoints
+
+```
+http://localhost:5000          # API Gateway (HTTP)
+http://localhost:5001          # API Gateway (HTTPS)
+http://localhost:5000/swagger  # API Documentation
+```
+
+### Running the Gateway
+
+```bash
+# Using Docker
+docker-compose up -d gateway
+
+# Using .NET CLI
+cd src/Ecom.Gateway.API
+dotnet run
+
+# Using Visual Studio
+# Open Ecommerce.Stacks.sln and run the project
 ```
 
 ## 💡 Usage Examples
