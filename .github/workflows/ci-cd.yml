@@ -10,6 +10,8 @@ on:
 env:
   DOTNET_VERSION: "9.0.x"
   APP_NAME: "ecommerce-stacks"
+  DOCKER_IMAGE: "ecommerce-gateway"
+  DOCKER_TAG: "latest"
 
 jobs:
   # ==========================================
@@ -48,18 +50,12 @@ jobs:
         run: |
           dotnet test Ecommerce.Stacks.sln --configuration Release --no-build --verbosity normal
 
-      - name: "Publish Build Artifacts"
+      - name: "Build Docker Image"
         run: |
-          dotnet publish src/Ecom.Gateway.API/Ecom.Gateway.API.csproj -c Release -o ./artifacts/gateway
-
-      - name: "Upload Build Artifacts"
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-artifacts
-          path: ./artifacts/
+          docker build -t ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }} -f src/Ecom.Gateway.API/Dockerfile .
 
   # ==========================================
-  # .NET DEPLOY JOB
+  # DOCKER DEPLOY JOB
   # ==========================================
   deploy-development:
     name: "Deploy to Development"
@@ -70,59 +66,53 @@ jobs:
       - name: "Checkout Code"
         uses: actions/checkout@v4
 
-      - name: "Setup .NET"
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: "Download Build Artifacts"
-        uses: actions/download-artifact@v4
-        with:
-          name: build-artifacts
-          path: ./artifacts/
-
       - name: "Setup Environment"
         run: |
           # Copy environment file
           cp .env.example .env
 
           # Ensure logs directory exists
-          mkdir -p ./src/Ecom.Gateway.API/logs
+          mkdir -p ./logs
 
-          # Make artifacts executable
-          chmod +x ./artifacts/gateway/Ecom.Gateway.API
-
-          # Set environment variables
-          echo "ASPNETCORE_ENVIRONMENT=Development" >> $GITHUB_ENV
-          echo "ASPNETCORE_URLS=http://localhost:5300;https://localhost:5301" >> $GITHUB_ENV
-
-      - name: "Run .NET Application"
+      - name: "Stop Existing Container"
         run: |
-          # Kill any existing process on the ports
-          sudo lsof -ti:5300,5301 | xargs -r sudo kill -9
+          # Stop and remove existing container
+          docker stop ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true
+          docker rm ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true
 
-          # Start the .NET application in the background
-          cd ./artifacts/gateway
-          nohup ./Ecom.Gateway.API > app.log 2>&1 &
-          echo $! > ./app.pid
+      - name: "Run Docker Container"
+        run: |
+          docker run -d \
+            --name ${{ env.DOCKER_IMAGE }}-container \
+            -p 5500:5500 \
+            -p 5501:5501 \
+            -e ASPNETCORE_ENVIRONMENT=Development \
+            -e ASPNETCORE_URLS="http://+:5500;https://+:5501" \
+            -v $(pwd)/logs:/app/logs \
+            -v $(pwd)/.env:/app/.env \
+            ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
 
-          # Wait for application to start
-          echo "Waiting for the application to start..."
+          # Wait for container to start
+          echo "Waiting for the container to start..."
           sleep 10
 
       - name: "Health Check"
         run: |
           # Wait for gateway to be healthy
           echo "Checking gateway health..."
-          timeout 60s bash -c 'until curl -s -f http://localhost:5300/health; do echo "Waiting for gateway..."; sleep 5; done' || echo "Gateway health check timeout"
+          timeout 60s bash -c 'until curl -s -f http://localhost:5500/health; do echo "Waiting for gateway..."; sleep 5; done' || echo "Gateway health check timeout"
 
-      - name: "Show Service URLs"
+      - name: "Show Container Status"
         run: |
-          echo "ðŸš€ Development deployment completed!"
+          echo "🚀 Development deployment completed!"
           echo ""
-          echo "ðŸ“‹ Service URLs:"
-          echo "  â€¢ API Gateway: http://localhost:5300"
-          echo "  â€¢ Swagger UI: http://localhost:5300/swagger"
+          echo "Docker Container Status:"
+          docker ps --filter "name=${{ env.DOCKER_IMAGE }}-container"
+          echo ""
+          echo "Service URLs:"
+          echo "  • API Gateway: http://localhost:5500"
+          echo "  • Swagger UI: http://localhost:5500/swagger"
+
   # ==========================================
   # CLEANUP JOB
   # ==========================================
@@ -133,17 +123,11 @@ jobs:
     if: always()
 
     steps:
-      - name: "Stop .NET Application"
+      - name: "Stop Docker Container"
         run: |
-          # Stop any running .NET application on ports 5300 and 5301
-          sudo lsof -ti:5300,5301 | xargs -r sudo kill -9
-
-          # If we have a PID file, use it to stop the app
-          if [ -f ./artifacts/gateway/app.pid ]; then
-            pid=$(cat ./artifacts/gateway/app.pid)
-            kill -15 $pid 2>/dev/null || true
-            rm ./artifacts/gateway/app.pid
-          fi
+          # Stop and remove container
+          docker stop ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true
+          docker rm ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true
 
       - name: "Archive Logs"
         run: |
@@ -151,7 +135,12 @@ jobs:
           mkdir -p ./logs/archive/$(date +%Y%m%d)
 
           # Copy current logs
-          cp -r ./src/Ecom.Gateway.API/logs/* ./logs/archive/$(date +%Y%m%d)/ 2>/dev/null || true
+          cp -r ./logs/* ./logs/archive/$(date +%Y%m%d)/ 2>/dev/null || true
 
           # Compress old logs (older than 7 days)
           find ./logs/archive -name "*.txt" -mtime +7 -exec gzip {} \; 2>/dev/null || true
+
+      - name: "Cleanup Docker Images"
+        run: |
+          # Remove dangling images
+          docker image prune -f

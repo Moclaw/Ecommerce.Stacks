@@ -21,7 +21,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 // Add Health Checks with dependencies
-var healthChecks = builder.Services.AddHealthChecks()
+var healthChecks = builder.Services
+    .AddHealthChecks()
     .AddCheck(
         "self",
         () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy()
@@ -31,17 +32,32 @@ var healthChecks = builder.Services.AddHealthChecks()
 if (!builder.Environment.IsDevelopment())
 {
     healthChecks
-        .AddUrlGroup(new Uri("http://ecom.core.api:8080/health"), "core-api", tags: new[] { "services" })
-        .AddUrlGroup(new Uri("http://ecom.users.api:8080/health"), "users-api", tags: new[] { "services" });
+        .AddUrlGroup(
+            new Uri("http://ecom.core.api/health"),
+            "core-api",
+            tags: ["services"]
+        )
+        .AddUrlGroup(
+            new Uri("http://ecom.users.api/health"),
+            "users-api",
+            tags: ["services"]
+        );
 }
 else
-{
-    // In development, try to connect to local services if available
+{ // In development, try to connect to local services if available
     try
     {
         healthChecks
-            .AddUrlGroup(new Uri("http://localhost:5001/health"), "core-api-local", tags: new[] { "services" })
-            .AddUrlGroup(new Uri("http://localhost:5002/health"), "users-api-local", tags: new[] { "services" });
+            .AddUrlGroup(
+                new Uri("http://localhost:5502/health"),
+                "core-api-local",
+                tags: ["services"]
+            )
+            .AddUrlGroup(
+                new Uri("http://localhost:5504/health"),
+                "users-api-local",
+                tags: ["services"]
+            );
     }
     catch (Exception ex)
     {
@@ -114,7 +130,8 @@ app.MapReverseProxy();
 
 try
 {
-    var urls = app.Configuration["ASPNETCORE_URLS"] ?? "http://localhost:5000;https://localhost:5001";
+    var urls =
+        app.Configuration["ASPNETCORE_URLS"] ?? "http://localhost:5500;https://localhost:5501";
     Log.Information("Starting Ecommerce Gateway API with URLs: {Urls}", urls);
     app.Run();
 }
