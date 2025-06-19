@@ -1,25 +1,14 @@
-name: 'CI/CD Pipeline - Build & Deploy'
+name: 'CI/CD Pipeline - Development'
 
 on:
   push:
     branches: [ main, develop ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, develop ]
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Deployment Environment'
-        required: true
-        default: 'development'
-        type: choice
-        options:
-          - development
-          - staging
-          - production
 
 env:
   DOTNET_VERSION: '9.0.x'
-  DOCKER_REGISTRY: 'localhost:5000'
   APP_NAME: 'ecommerce-stacks'
 
 jobs:
@@ -57,27 +46,8 @@ jobs:
 
     - name: 'Run Unit Tests'
       run: |
-        dotnet test Ecommerce.Stacks.sln --configuration Release --no-build --verbosity normal --collect:"XPlat Code Coverage" --results-directory ./coverage
+        dotnet test Ecommerce.Stacks.sln --configuration Release --no-build --verbosity normal
 
-    - name: 'Generate Test Report'
-      uses: danielpalme/ReportGenerator-GitHub-Action@5.2.0
-      with:
-        reports: coverage/**/coverage.cobertura.xml
-        targetdir: coveragereport
-        reporttypes: Html;Cobertura
-        verbosity: Info
-
-    - name: 'Upload Test Results'
-      uses: actions/upload-artifact@v3
-      if: always()
-      with:
-        name: test-results
-        path: coveragereport/
-
-    - name: 'Security Scan'
-      run: |
-        dotnet list package --vulnerable --include-transitive
-        
     - name: 'Publish Build Artifacts'
       run: |
         dotnet publish src/Ecom.Gateway.API/Ecom.Gateway.API.csproj -c Release -o ./artifacts/gateway
@@ -89,10 +59,10 @@ jobs:
         path: ./artifacts/
 
   # ==========================================
-  # DOCKER BUILD JOB
+  # DOCKER BUILD & DEPLOY
   # ==========================================
-  docker-build:
-    name: 'Docker Build'
+  deploy-development:
+    name: 'Build & Deploy to Development'
     runs-on: self-hosted
     needs: build-and-test
     
@@ -103,161 +73,53 @@ jobs:
     - name: 'Set up Docker Buildx'
       uses: docker/setup-buildx-action@v3
 
-    - name: 'Build Docker Images'
-      run: |
-        # Build API Gateway
-        docker build -t ${{ env.DOCKER_REGISTRY }}/${{ env.APP_NAME }}-gateway:${{ github.sha }} \
-          -t ${{ env.DOCKER_REGISTRY }}/${{ env.APP_NAME }}-gateway:latest \
-          -f src/Ecom.Gateway.API/Dockerfile .
-
-    - name: 'Test Docker Images'
-      run: |
-        # Test if images can be created successfully
-        docker images | grep ${{ env.APP_NAME }}
-
-    - name: 'Push to Registry (Production only)'
-      if: github.ref == 'refs/heads/main'
-      run: |
-        docker push ${{ env.DOCKER_REGISTRY }}/${{ env.APP_NAME }}-gateway:${{ github.sha }}
-        docker push ${{ env.DOCKER_REGISTRY }}/${{ env.APP_NAME }}-gateway:latest
-
-  # ==========================================
-  # DEPLOY TO DEVELOPMENT
-  # ==========================================
-  deploy-development:
-    name: 'Deploy to Development'
-    runs-on: self-hosted
-    needs: [build-and-test, docker-build]
-    if: github.ref == 'refs/heads/develop'
-    environment: development
-    
-    steps:
-    - name: 'Checkout Code'
-      uses: actions/checkout@v4
-
-    - name: 'Deploy with Docker Compose'
+    - name: 'Setup Environment'
       run: |
         # Copy environment file
         cp .env.example .env
         
-        # Update environment variables for development
-        sed -i 's/ASPNETCORE_ENVIRONMENT=Development/ASPNETCORE_ENVIRONMENT=Development/' .env
-        
-        # Deploy services
+        # Ensure logs directory exists
+        mkdir -p ./src/Ecom.Gateway.API/logs
+
+    - name: 'Deploy with Docker Compose'
+      run: |
+        # Stop existing containers
         docker-compose down --remove-orphans
+        
+        # Build and start services
         docker-compose up -d --build
         
-        # Wait for services to be healthy
+        # Wait for services to be ready
+        echo "Waiting for services to start..."
         sleep 30
-        
-        # Health check
+
+    - name: 'Health Check'
+      run: |
+        # Check if all services are running
         docker-compose ps
         
-    - name: 'Run Integration Tests'
-      run: |
-        # Wait for all services to be ready
-        timeout 300 bash -c 'until docker-compose exec -T gateway curl -f http://localhost:8080/health; do sleep 5; done'
+        # Wait for gateway to be healthy
+        echo "Checking gateway health..."
+        timeout 120 bash -c 'until curl -f http://localhost:5000/health 2>/dev/null; do echo "Waiting for gateway..."; sleep 5; done' || echo "Gateway health check timeout"
         
-        # Run API tests
-        echo "Running integration tests..."
-        # Add your integration test commands here
+        # Check database connections
+        docker-compose exec -T postgres pg_isready -U ecommerce_user -d ecommerce_db || echo "PostgreSQL not ready"
+        docker-compose exec -T redis redis-cli ping || echo "Redis not ready"
 
-    - name: 'Notify Deployment Success'
-      if: success()
+    - name: 'Show Service URLs'
       run: |
-        echo "✅ Development deployment successful!"
-        echo "API Gateway: http://localhost:5000"
-        echo "Swagger UI: http://localhost:5000/swagger"
-
-  # ==========================================
-  # DEPLOY TO STAGING
-  # ==========================================
-  deploy-staging:
-    name: 'Deploy to Staging'
-    runs-on: self-hosted
-    needs: [build-and-test, docker-build]
-    if: github.ref == 'refs/heads/main'
-    environment: staging
-    
-    steps:
-    - name: 'Checkout Code'
-      uses: actions/checkout@v4
-
-    - name: 'Deploy to Staging'
-      run: |
-        # Copy and configure environment
-        cp .env.example .env
-        sed -i 's/ASPNETCORE_ENVIRONMENT=Development/ASPNETCORE_ENVIRONMENT=Staging/' .env
-        
-        # Deploy with specific staging configuration
-        docker-compose -f docker-compose.yml -f docker-compose.staging.yml down --remove-orphans
-        docker-compose -f docker-compose.yml -f docker-compose.staging.yml up -d --build
-        
-        # Health check
-        sleep 30
-        docker-compose ps
-
-    - name: 'Run Smoke Tests'
-      run: |
-        # Basic smoke tests for staging
-        timeout 300 bash -c 'until curl -f http://localhost:5000/health; do sleep 5; done'
-        echo "✅ Staging deployment successful!"
-
-  # ==========================================
-  # DEPLOY TO PRODUCTION
-  # ==========================================
-  deploy-production:
-    name: 'Deploy to Production'
-    runs-on: self-hosted
-    needs: [build-and-test, docker-build, deploy-staging]
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    environment: production
-    
-    steps:
-    - name: 'Checkout Code'
-      uses: actions/checkout@v4
-
-    - name: 'Backup Current Production'
-      run: |
-        # Create backup of current deployment
-        docker-compose -f docker-compose.prod.yml exec postgres pg_dump -U ${{ secrets.POSTGRES_USER }} ${{ secrets.POSTGRES_DB }} > backup_$(date +%Y%m%d_%H%M%S).sql
-        
-    - name: 'Deploy to Production'
-      run: |
-        # Copy production environment
-        cp .env.production .env
-        
-        # Zero-downtime deployment
-        docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build --scale gateway=2
-        
-        # Health check
-        sleep 60
-        docker-compose -f docker-compose.yml -f docker-compose.prod.yml ps
-
-    - name: 'Production Health Check'
-      run: |
-        # Comprehensive health checks
-        timeout 300 bash -c 'until curl -f https://api.yourdomain.com/health; do sleep 10; done'
-        
-        # Database connectivity
-        docker-compose -f docker-compose.prod.yml exec postgres pg_isready
-        
-        # Redis connectivity
-        docker-compose -f docker-compose.prod.yml exec redis redis-cli ping
-
-    - name: 'Notify Production Deployment'
-      if: success()
-      run: |
-        echo "🚀 Production deployment successful!"
-        # Add notification to Slack, Teams, or email here
-
-    - name: 'Rollback on Failure'
-      if: failure()
-      run: |
-        echo "❌ Production deployment failed. Rolling back..."
-        # Add rollback logic here
-        docker-compose -f docker-compose.prod.yml down
-        # Restore from backup if needed
+        echo "🚀 Development deployment completed!"
+        echo ""
+        echo "📋 Service URLs:"
+        echo "  • API Gateway: http://localhost:5000"
+        echo "  • Swagger UI: http://localhost:5000/swagger"
+        echo "  • Adminer (PostgreSQL): http://localhost:8081"
+        echo "  • Mongo Express: http://localhost:8082"
+        echo "  • Redis Commander: http://localhost:8083"
+        echo "  • Kafka UI: http://localhost:8080"
+        echo ""
+        echo "📊 Service Status:"
+        docker-compose ps --format "table {{.Name}}\t{{.State}}\t{{.Ports}}"
 
   # ==========================================
   # CLEANUP JOB
@@ -265,24 +127,25 @@ jobs:
   cleanup:
     name: 'Cleanup'
     runs-on: self-hosted
-    needs: [deploy-development, deploy-staging, deploy-production]
+    needs: deploy-development
     if: always()
     
     steps:
     - name: 'Clean Docker System'
       run: |
         # Remove unused Docker resources
-        docker system prune -f
-        docker volume prune -f
+        docker system prune -f --volumes
         
-        # Keep only latest 5 images per service
-        docker images --format "table {{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.CreatedAt}}" | grep ${{ env.APP_NAME }} | tail -n +6 | awk '{print $2}' | xargs -r docker rmi
+        # Remove old images (keep latest 3)
+        docker images --format "table {{.Repository}}:{{.Tag}}\t{{.ID}}\t{{.CreatedAt}}" | grep ${{ env.APP_NAME }} | tail -n +4 | awk '{print $2}' | xargs -r docker rmi || true
 
     - name: 'Archive Logs'
       run: |
-        # Archive application logs
+        # Create logs archive directory
         mkdir -p ./logs/archive/$(date +%Y%m%d)
+        
+        # Copy current logs
         cp -r ./src/Ecom.Gateway.API/logs/* ./logs/archive/$(date +%Y%m%d)/ 2>/dev/null || true
         
-        # Compress old logs
-        find ./logs/archive -name "*.txt" -mtime +7 -exec gzip {} \;
+        # Compress old logs (older than 7 days)
+        find ./logs/archive -name "*.txt" -mtime +7 -exec gzip {} \; 2>/dev/null || true

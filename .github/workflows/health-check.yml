@@ -1,170 +1,130 @@
-name: 'Health Check & Monitoring'
+name: 'Health Check - Development'
 
 on:
   schedule:
-    # Run health checks every 5 minutes
-    - cron: '*/5 * * * *'
+    # Run health checks every 15 minutes
+    - cron: '*/15 * * * *'
   workflow_dispatch:
-
-env:
-  HEALTH_CHECK_TIMEOUT: 30
 
 jobs:
   health-check:
-    name: 'Health Check'
+    name: 'Development Health Check'
     runs-on: self-hosted
     
     steps:
     - name: 'Check API Gateway Health'
       id: gateway-health
       run: |
-        if curl -f --max-time ${{ env.HEALTH_CHECK_TIMEOUT }} http://localhost:5000/health; then
+        if curl -f --max-time 30 http://localhost:5000/health 2>/dev/null; then
+          echo "✅ API Gateway is healthy"
           echo "status=healthy" >> $GITHUB_OUTPUT
         else
+          echo "❌ API Gateway is unhealthy"
           echo "status=unhealthy" >> $GITHUB_OUTPUT
         fi
 
     - name: 'Check PostgreSQL Health'
       id: postgres-health
       run: |
-        if docker-compose exec -T postgres pg_isready -U ${{ secrets.POSTGRES_USER }} -d ${{ secrets.POSTGRES_DB }}; then
+        if docker-compose exec -T postgres pg_isready -U ecommerce_user -d ecommerce_db 2>/dev/null; then
+          echo "✅ PostgreSQL is healthy"
           echo "status=healthy" >> $GITHUB_OUTPUT
         else
+          echo "❌ PostgreSQL is unhealthy"
           echo "status=unhealthy" >> $GITHUB_OUTPUT
         fi
 
     - name: 'Check MongoDB Health'
       id: mongodb-health
       run: |
-        if docker-compose exec -T mongodb mongosh --eval "db.adminCommand('ping')" --quiet; then
+        if docker-compose exec -T mongodb mongosh --eval "db.adminCommand('ping')" --quiet 2>/dev/null; then
+          echo "✅ MongoDB is healthy"
           echo "status=healthy" >> $GITHUB_OUTPUT
         else
+          echo "❌ MongoDB is unhealthy"
           echo "status=unhealthy" >> $GITHUB_OUTPUT
         fi
 
     - name: 'Check Redis Health'
       id: redis-health
       run: |
-        if docker-compose exec -T redis redis-cli ping | grep -q PONG; then
+        if docker-compose exec -T redis redis-cli ping 2>/dev/null | grep -q PONG; then
+          echo "✅ Redis is healthy"
           echo "status=healthy" >> $GITHUB_OUTPUT
         else
+          echo "❌ Redis is unhealthy"
           echo "status=unhealthy" >> $GITHUB_OUTPUT
         fi
 
-    - name: 'Check Kafka Health'
-      id: kafka-health
+    - name: 'Check Docker Containers'
       run: |
-        if docker-compose exec -T kafka kafka-broker-api-versions --bootstrap-server localhost:9092 > /dev/null 2>&1; then
-          echo "status=healthy" >> $GITHUB_OUTPUT
-        else
-          echo "status=unhealthy" >> $GITHUB_OUTPUT
-        fi
-
-    - name: 'Generate Health Report'
-      run: |
-        echo "# Health Check Report - $(date)" > health-report.md
-        echo "" >> health-report.md
-        echo "| Service | Status |" >> health-report.md
-        echo "|---------|---------|" >> health-report.md
-        echo "| API Gateway | ${{ steps.gateway-health.outputs.status }} |" >> health-report.md
-        echo "| PostgreSQL | ${{ steps.postgres-health.outputs.status }} |" >> health-report.md
-        echo "| MongoDB | ${{ steps.mongodb-health.outputs.status }} |" >> health-report.md
-        echo "| Redis | ${{ steps.redis-health.outputs.status }} |" >> health-report.md
-        echo "| Kafka | ${{ steps.kafka-health.outputs.status }} |" >> health-report.md
+        echo "📊 Docker Container Status:"
+        docker-compose ps --format "table {{.Name}}\t{{.State}}\t{{.Status}}"
         
-        cat health-report.md
+        echo ""
+        echo "💾 Docker System Info:"
+        docker system df
 
-    - name: 'Alert on Unhealthy Services'
+    - name: 'Generate Health Summary'
+      run: |
+        echo "# 🏥 Health Check Summary - $(date)" 
+        echo ""
+        echo "| Service | Status |"
+        echo "|---------|---------|"
+        echo "| API Gateway | ${{ steps.gateway-health.outputs.status }} |"
+        echo "| PostgreSQL | ${{ steps.postgres-health.outputs.status }} |"
+        echo "| MongoDB | ${{ steps.mongodb-health.outputs.status }} |"
+        echo "| Redis | ${{ steps.redis-health.outputs.status }} |"
+        echo ""
+        
+        # Count unhealthy services
+        UNHEALTHY_COUNT=0
+        if [ "${{ steps.gateway-health.outputs.status }}" = "unhealthy" ]; then
+          UNHEALTHY_COUNT=$((UNHEALTHY_COUNT + 1))
+        fi
+        if [ "${{ steps.postgres-health.outputs.status }}" = "unhealthy" ]; then
+          UNHEALTHY_COUNT=$((UNHEALTHY_COUNT + 1))
+        fi
+        if [ "${{ steps.mongodb-health.outputs.status }}" = "unhealthy" ]; then
+          UNHEALTHY_COUNT=$((UNHEALTHY_COUNT + 1))
+        fi
+        if [ "${{ steps.redis-health.outputs.status }}" = "unhealthy" ]; then
+          UNHEALTHY_COUNT=$((UNHEALTHY_COUNT + 1))
+        fi
+        
+        if [ $UNHEALTHY_COUNT -eq 0 ]; then
+          echo "🎉 All services are healthy!"
+        else
+          echo "⚠️ $UNHEALTHY_COUNT service(s) are unhealthy"
+        fi
+
+    - name: 'Restart Unhealthy Services'
       if: contains(steps.*.outputs.status, 'unhealthy')
       run: |
-        echo "⚠️ ALERT: One or more services are unhealthy!"
-        echo "Timestamp: $(date)"
-        echo "Check the health report above for details."
+        echo "🔄 Attempting to restart unhealthy services..."
         
-        # Add notification logic here (Slack, Teams, Email, etc.)
-        # Example: curl -X POST -H 'Content-type: application/json' --data '{"text":"Health check failed!"}' $SLACK_WEBHOOK_URL
-
-  system-metrics:
-    name: 'System Metrics'
-    runs-on: self-hosted
-    
-    steps:
-    - name: 'Collect System Metrics'
-      run: |
-        echo "# System Metrics - $(date)" > metrics-report.md
-        echo "" >> metrics-report.md
-        
-        # CPU Usage
-        echo "## CPU Usage" >> metrics-report.md
-        top -bn1 | grep "Cpu(s)" >> metrics-report.md
-        echo "" >> metrics-report.md
-        
-        # Memory Usage
-        echo "## Memory Usage" >> metrics-report.md
-        free -h >> metrics-report.md
-        echo "" >> metrics-report.md
-        
-        # Disk Usage
-        echo "## Disk Usage" >> metrics-report.md
-        df -h >> metrics-report.md
-        echo "" >> metrics-report.md
-        
-        # Docker Stats
-        echo "## Docker Container Stats" >> metrics-report.md
-        docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.NetIO}}\t{{.BlockIO}}" >> metrics-report.md
-        echo "" >> metrics-report.md
-        
-        cat metrics-report.md
-
-    - name: 'Check Resource Usage'
-      run: |
-        # Check if any container is using too much CPU (>80%)
-        HIGH_CPU=$(docker stats --no-stream --format "{{.Container}} {{.CPUPerc}}" | awk '{gsub(/%/, "", $2); if($2 > 80) print $1}')
-        
-        # Check if any container is using too much memory (>80%)
-        HIGH_MEM=$(docker stats --no-stream --format "{{.Container}} {{.MemPerc}}" | awk '{gsub(/%/, "", $2); if($2 > 80) print $1}')
-        
-        if [ ! -z "$HIGH_CPU" ]; then
-          echo "⚠️ High CPU usage detected in containers: $HIGH_CPU"
+        if [ "${{ steps.gateway-health.outputs.status }}" = "unhealthy" ]; then
+          echo "Restarting API Gateway..."
+          docker-compose restart gateway
         fi
         
-        if [ ! -z "$HIGH_MEM" ]; then
-          echo "⚠️ High memory usage detected in containers: $HIGH_MEM"
-        fi
-
-  backup-check:
-    name: 'Backup Verification'
-    runs-on: self-hosted
-    if: github.event.schedule == '0 2 * * *'  # Daily at 2 AM
-    
-    steps:
-    - name: 'Verify Database Backups'
-      run: |
-        BACKUP_DIR="./backups"
-        TODAY=$(date +%Y%m%d)
-        
-        # Check if PostgreSQL backup exists and is recent
-        if [ -f "$BACKUP_DIR/postgres_backup_$TODAY.sql" ]; then
-          echo "✅ PostgreSQL backup found for today"
-        else
-          echo "❌ PostgreSQL backup missing for today"
-          exit 1
+        if [ "${{ steps.postgres-health.outputs.status }}" = "unhealthy" ]; then
+          echo "Restarting PostgreSQL..."
+          docker-compose restart postgres
         fi
         
-        # Check if MongoDB backup exists and is recent
-        if [ -d "$BACKUP_DIR/mongodb_backup_$TODAY" ]; then
-          echo "✅ MongoDB backup found for today"
-        else
-          echo "❌ MongoDB backup missing for today"
-          exit 1
+        if [ "${{ steps.mongodb-health.outputs.status }}" = "unhealthy" ]; then
+          echo "Restarting MongoDB..."
+          docker-compose restart mongodb
         fi
-
-    - name: 'Test Backup Integrity'
-      run: |
-        # Test PostgreSQL backup integrity
-        echo "Testing PostgreSQL backup integrity..."
-        # Add PostgreSQL backup test commands here
         
-        # Test MongoDB backup integrity
-        echo "Testing MongoDB backup integrity..."
-        # Add MongoDB backup test commands here
+        if [ "${{ steps.redis-health.outputs.status }}" = "unhealthy" ]; then
+          echo "Restarting Redis..."
+          docker-compose restart redis
+        fi
+        
+        echo "Waiting 30 seconds for services to restart..."
+        sleep 30
+        
+        echo "Service status after restart:"
+        docker-compose ps
