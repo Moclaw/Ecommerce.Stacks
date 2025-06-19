@@ -121,7 +121,6 @@ services:
     networks:
       - ecommerce-network
     restart: unless-stopped
-
   # Kafka Message Broker
   kafka:
     image: confluentinc/cp-kafka:latest
@@ -135,7 +134,7 @@ services:
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_AUTO_CREATE_TOPICS_ENABLE: true
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
     ports:
       - "${KAFKA_PORT}:9092"
     volumes:
