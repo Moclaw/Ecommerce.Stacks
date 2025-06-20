@@ -1,4 +1,4 @@
-name: "CI/CD Pipeline - Development"
+name: "CI/CD Pipeline - Gateway Service"
 
 on:
   push:
@@ -9,9 +9,11 @@ on:
 
 env:
   DOTNET_VERSION: "9.0.x"
-  APP_NAME: "ecommerce-stacks"
-  DOCKER_IMAGE: "ecommerce-gateway"
+  APP_NAME: "ecommerce-gateway"
+  DOCKER_IMAGE: "ecom-gateway-api"
   DOCKER_TAG: "latest"
+  CONTAINER_NAME: "ecom-gateway-api-container"
+  API_PORT: 5500
 
 jobs:
   # ==========================================
@@ -41,23 +43,23 @@ jobs:
             ${{ runner.os }}-nuget-
 
       - name: "Restore Dependencies"
-        run: dotnet restore Ecommerce.Stacks.sln
+        run: dotnet restore
 
       - name: "Build Solution"
-        run: dotnet build Ecommerce.Stacks.sln --configuration Release --no-restore
+        run: dotnet build --configuration Release --no-restore
 
       - name: "Run Unit Tests"
         run: |
-          dotnet test Ecommerce.Stacks.sln --configuration Release --no-build --verbosity normal
+          dotnet test --configuration Release --no-build --verbosity normal
 
       - name: "Build Docker Image"
         run: |
-          docker build -t ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }} -f src/Ecom.Gateway.API/Dockerfile .
+          docker build -t ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }} -f src/Gateway/Dockerfile .
 
   # ==========================================
-  # DOCKER DEPLOY JOB
+  # DEPLOY JOB
   # ==========================================
-  deploy-development:
+  deploy:
     name: "Deploy to Development"
     runs-on: self-hosted
     needs: build-and-test
@@ -68,12 +70,76 @@ jobs:
 
       - name: "Setup Environment"
         run: |
-          # Copy environment file
-          cp .env.example .env
+          # Ensure logs directory exists
+          mkdir -p ./logs
 
-          # Ensure directories exist
-          mkdir -p ./logs ./keys
+      - name: "Stop and Remove Existing Container"
+        run: |
+          # Check if container exists and stop it
+          if docker ps -a --format '{{.Names}}' | grep -q "${{ env.CONTAINER_NAME }}"; then
+            echo "Stopping existing container..."
+            docker stop ${{ env.CONTAINER_NAME }}
+            docker rm ${{ env.CONTAINER_NAME }}
+          else
+            echo "No existing container found."
+          fi
 
+      - name: "Deploy with Docker"
+        run: |
+          echo "Starting container deployment..."
+          
+          # Run container with proper configuration
+          docker run -d \
+            --name ${{ env.CONTAINER_NAME }} \
+            --restart unless-stopped \
+            -p ${{ env.API_PORT }}:80 \
+            -e ASPNETCORE_ENVIRONMENT=Development \
+            -v "$(pwd)/logs:/app/logs" \
+            --network bridge \
+            ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
+          
+          # Display container info
+          echo "Container started with ID: $(docker ps -q -f name=${{ env.CONTAINER_NAME }})"
+
+      - name: "Show Container Status"
+        run: |
+          echo "🚀 Development deployment completed!"
+          echo ""
+          echo "Docker Container Status:"
+          docker ps --filter "name=${{ env.CONTAINER_NAME }}"
+          echo ""
+          echo "Container Logs:"
+          docker logs --tail 20 ${{ env.CONTAINER_NAME }}
+          echo ""
+          echo "Service URLs:"
+          echo "  • API Gateway: http://localhost:${{ env.API_PORT }}"
+          echo "  • Swagger UI: http://localhost:${{ env.API_PORT }}/swagger"
+
+  # ==========================================
+  # CLEANUP JOB
+  # ==========================================
+  cleanup:
+    name: "Cleanup"
+    runs-on: self-hosted
+    needs: deploy
+    if: always()
+
+    steps:
+      - name: "Archive Logs"
+        run: |
+          # Create logs archive directory
+          mkdir -p ./logs/archive/$(date +%Y%m%d)
+
+          # Copy current logs
+          cp -r ./logs/* ./logs/archive/$(date +%Y%m%d)/ 2>/dev/null || true
+
+          # Compress old logs (older than 7 days)
+          find ./logs/archive -name "*.txt" -mtime +7 -exec gzip {} \; 2>/dev/null || true
+
+      - name: "Cleanup Docker Images"
+        run: |
+          # Remove dangling images
+          docker image prune -f
       - name: "Stop and Remove Existing Container"
         run: |
           # Check if container exists and stop it
@@ -94,17 +160,35 @@ jobs:
             --name ${{ env.DOCKER_IMAGE }}-container \
             --restart unless-stopped \
             -p 5500:5500 \
-            -e ASPNETCORE_ENVIRONMENT=Development \
+            -e ASPNETCORE_ENVIRONMENT=Production \
             -e ASPNETCORE_URLS="http://+:5500" \
             -e DOTNET_RUNNING_IN_CONTAINER=true \
+            -e DataProtection__UseInMemoryStorage=true \
             -v "$(pwd)/logs:/app/logs" \
-            -v "$(pwd)/keys:/app/keys" \
-            -v "$(pwd)/.env:/app/.env" \
-            --network bridge \
+            -v "$(pwd)/config/appsettings.Production.json:/app/appsettings.Production.json:ro" \
+            --add-host=host.docker.internal:host-gateway \
             ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
+          
+          # Wait for container to start
+          sleep 5
           
           # Display container info
           echo "Container started with ID: $(docker ps -q -f name=${{ env.DOCKER_IMAGE }}-container)"
+
+      - name: "Health Check"
+        run: |
+          echo "Performing health check..."
+          
+          # Wait for service to be ready
+          for i in {1..30}; do
+            if curl -f http://localhost:5500/health 2>/dev/null; then
+              echo "✅ Health check passed!"
+              break
+            else
+              echo "⏳ Waiting for service to be ready... ($i/30)"
+              sleep 2
+            fi
+          done
 
       - name: "Show Container Status"
         run: |
@@ -128,46 +212,11 @@ jobs:
     name: "Cleanup"
     runs-on: self-hosted
     needs: deploy-development
-    if: always()
+    if: failure()
 
     steps:
-      - name: "Stop Docker Container"
+      - name: "Stop Docker Container on Failure"
         run: |
-          # Stop and remove container
+          # Stop and remove container only on failure
           docker stop ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true
-          docker rm ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true
-
-      - name: "Archive Logs"
-        run: |
-          # Create logs archive directory
-          mkdir -p ./logs/archive/$(date +%Y%m%d)
-
-          # Copy current logs
-          cp -r ./logs/* ./logs/archive/$(date +%Y%m%d)/ 2>/dev/null || true
-
-          # Compress old logs (older than 7 days)
-          find ./logs/archive -name "*.txt" -mtime +7 -exec gzip {} \; 2>/dev/null || true
-
-      - name: "Cleanup Docker Images"
-        run: |
-          # Remove dangling images
-          docker image prune -f
-          # Stop and remove container
-          docker stop ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true
-          docker rm ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true
-
-      - name: "Archive Logs"
-        run: |
-          # Create logs archive directory
-          mkdir -p ./logs/archive/$(date +%Y%m%d)
-
-          # Copy current logs
-          cp -r ./logs/* ./logs/archive/$(date +%Y%m%d)/ 2>/dev/null || true
-
-          # Compress old logs (older than 7 days)
-          find ./logs/archive -name "*.txt" -mtime +7 -exec gzip {} \; 2>/dev/null || true
-
-      - name: "Cleanup Docker Images"
-        run: |
-          # Remove dangling images
-          docker image prune -f
+          docker rm ${{ env.DOCKER_IMAGE }}-container 2

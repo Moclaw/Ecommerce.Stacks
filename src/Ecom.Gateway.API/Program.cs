@@ -21,11 +21,6 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Configure Data Protection for container environment
-builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo("/app/keys"))
-    .SetApplicationName("Ecommerce.Gateway");
-
 // Add Health Checks with dependencies
 var healthChecks = builder.Services
     .AddHealthChecks()
@@ -118,13 +113,6 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
-}
-
-// Only use HTTPS redirection if not in container or if certificates are available
-if (!app.Environment.IsEnvironment("Container") && 
-    !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_Kestrel__Certificates__Default__Path")))
-{
-    app.UseHttpsRedirection();
 }
 
 app.UseCors();
