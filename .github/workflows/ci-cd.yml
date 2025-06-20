@@ -204,19 +204,3 @@ jobs:
           echo "  • API Gateway: http://localhost:5500"
           echo "  • Swagger UI: http://localhost:5500/swagger"
           echo "  • Health Check: http://localhost:5500/health"
-
-  # ==========================================
-  # CLEANUP JOB
-  # ==========================================
-  cleanup:
-    name: "Cleanup"
-    runs-on: self-hosted
-    needs: deploy-development
-    if: failure()
-
-    steps:
-      - name: "Stop Docker Container on Failure"
-        run: |
-          # Stop and remove container only on failure
-          docker stop ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true
-          docker rm ${{ env.DOCKER_IMAGE }}-container 2
