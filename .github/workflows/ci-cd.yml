@@ -71,36 +71,40 @@ jobs:
           # Copy environment file
           cp .env.example .env
 
-          # Ensure logs directory exists
-          mkdir -p ./logs
+          # Ensure directories exist
+          mkdir -p ./logs ./keys
 
-      - name: "Stop Existing Container"
+      - name: "Stop and Remove Existing Container"
         run: |
-          # Stop and remove existing container
-          docker stop ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true
-          docker rm ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true
+          # Check if container exists and stop it
+          if docker ps -a --format '{{.Names}}' | grep -q "${{ env.DOCKER_IMAGE }}-container"; then
+            echo "Stopping existing container..."
+            docker stop ${{ env.DOCKER_IMAGE }}-container
+            docker rm ${{ env.DOCKER_IMAGE }}-container
+          else
+            echo "No existing container found."
+          fi
 
-      - name: "Run Docker Container"
+      - name: "Deploy with Docker"
         run: |
+          echo "Starting container deployment..."
+          
+          # Run container with proper configuration
           docker run -d \
             --name ${{ env.DOCKER_IMAGE }}-container \
+            --restart unless-stopped \
             -p 5500:5500 \
-            -p 5501:5501 \
             -e ASPNETCORE_ENVIRONMENT=Development \
-            -e ASPNETCORE_URLS="http://+:5500;https://+:5501" \
-            -v $(pwd)/logs:/app/logs \
-            -v $(pwd)/.env:/app/.env \
+            -e ASPNETCORE_URLS="http://+:5500" \
+            -e DOTNET_RUNNING_IN_CONTAINER=true \
+            -v "$(pwd)/logs:/app/logs" \
+            -v "$(pwd)/keys:/app/keys" \
+            -v "$(pwd)/.env:/app/.env" \
+            --network bridge \
             ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
-
-          # Wait for container to start
-          echo "Waiting for the container to start..."
-          sleep 10
-
-      - name: "Health Check"
-        run: |
-          # Wait for gateway to be healthy
-          echo "Checking gateway health..."
-          timeout 60s bash -c 'until curl -s -f http://localhost:5500/health; do echo "Waiting for gateway..."; sleep 5; done' || echo "Gateway health check timeout"
+          
+          # Display container info
+          echo "Container started with ID: $(docker ps -q -f name=${{ env.DOCKER_IMAGE }}-container)"
 
       - name: "Show Container Status"
         run: |
@@ -109,9 +113,13 @@ jobs:
           echo "Docker Container Status:"
           docker ps --filter "name=${{ env.DOCKER_IMAGE }}-container"
           echo ""
+          echo "Container Logs:"
+          docker logs --tail 20 ${{ env.DOCKER_IMAGE }}-container
+          echo ""
           echo "Service URLs:"
           echo "  • API Gateway: http://localhost:5500"
           echo "  • Swagger UI: http://localhost:5500/swagger"
+          echo "  • Health Check: http://localhost:5500/health"
 
   # ==========================================
   # CLEANUP JOB
@@ -125,6 +133,25 @@ jobs:
     steps:
       - name: "Stop Docker Container"
         run: |
+          # Stop and remove container
+          docker stop ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true
+          docker rm ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true
+
+      - name: "Archive Logs"
+        run: |
+          # Create logs archive directory
+          mkdir -p ./logs/archive/$(date +%Y%m%d)
+
+          # Copy current logs
+          cp -r ./logs/* ./logs/archive/$(date +%Y%m%d)/ 2>/dev/null || true
+
+          # Compress old logs (older than 7 days)
+          find ./logs/archive -name "*.txt" -mtime +7 -exec gzip {} \; 2>/dev/null || true
+
+      - name: "Cleanup Docker Images"
+        run: |
+          # Remove dangling images
+          docker image prune -f
           # Stop and remove container
           docker stop ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true
           docker rm ${{ env.DOCKER_IMAGE }}-container 2>/dev/null || true

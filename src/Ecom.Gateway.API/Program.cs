@@ -2,6 +2,7 @@ using Serilog;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -19,6 +20,11 @@ builder.Host.UseSerilog();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Configure Data Protection for container environment
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo("/app/keys"))
+    .SetApplicationName("Ecommerce.Gateway");
 
 // Add Health Checks with dependencies
 var healthChecks = builder.Services
@@ -114,7 +120,13 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// Only use HTTPS redirection if not in container or if certificates are available
+if (!app.Environment.IsEnvironment("Container") && 
+    !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("ASPNETCORE_Kestrel__Certificates__Default__Path")))
+{
+    app.UseHttpsRedirection();
+}
+
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
@@ -130,9 +142,14 @@ app.MapReverseProxy();
 
 try
 {
-    var urls =
-        app.Configuration["ASPNETCORE_URLS"] ?? "http://localhost:5500;https://localhost:5501";
+    var urls = app.Configuration["ASPNETCORE_URLS"] ?? "http://localhost:5500";
     Log.Information("Starting Ecommerce Gateway API with URLs: {Urls}", urls);
+    
+    // Log environment information
+    var environment = app.Environment.EnvironmentName;
+    var isContainer = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
+    Log.Information("Environment: {Environment}, Container: {IsContainer}", environment, isContainer);
+    
     app.Run();
 }
 catch (Exception ex)
