@@ -10,10 +10,9 @@ on:
 env:
   DOTNET_VERSION: "9.0.x"
   APP_NAME: "ecommerce-gateway"
-  DOCKER_IMAGE: "ecom-gateway-api"
-  DOCKER_TAG: "latest"
-  CONTAINER_NAME: "ecom-gateway-api-container"
   API_PORT: 5500
+  PUBLISH_PATH: "./publish"
+  APP_PATH: "src/Ecom.Gateway.API"
 
 jobs:
   # ==========================================
@@ -52,9 +51,9 @@ jobs:
         run: |
           dotnet test --configuration Release --no-build --verbosity normal
 
-      - name: "Build Docker Image"
+      - name: "Publish Application"
         run: |
-          docker build -t ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }} -f src/Ecom.Gateway.API/Dockerfile .
+          dotnet publish ${{ env.APP_PATH }} --configuration Release --output ${{ env.PUBLISH_PATH }} --no-build
 
   # ==========================================
   # DEPLOY JOB
@@ -73,43 +72,71 @@ jobs:
           # Ensure logs directory exists
           mkdir -p ./logs
 
-      - name: "Stop and Remove Existing Container"
+      - name: "Stop Existing Application"
         run: |
-          # Check if container exists and stop it
-          if docker ps -a --format '{{.Names}}' | grep -q "${{ env.CONTAINER_NAME }}"; then
-            echo "Stopping existing container..."
-            docker stop ${{ env.CONTAINER_NAME }}
-            docker rm ${{ env.CONTAINER_NAME }}
+          # Find and kill existing process
+          PROCESS_ID=$(ps aux | grep "Ecom.Gateway.API" | grep -v grep | awk '{print $2}' | head -1)
+          if [ ! -z "$PROCESS_ID" ]; then
+            echo "Stopping existing application (PID: $PROCESS_ID)..."
+            kill -TERM $PROCESS_ID
+            sleep 5
+            # Force kill if still running
+            if kill -0 $PROCESS_ID 2>/dev/null; then
+              kill -KILL $PROCESS_ID
+            fi
+            echo "Application stopped."
           else
-            echo "No existing container found."
+            echo "No existing application process found."
           fi
 
-      - name: "Deploy with Docker"
+      - name: "Deploy Application"
         run: |
-          echo "Starting container deployment..."
+          echo "Starting application deployment..."
           
-          # Run container with proper configuration
-          docker run -d \
-            --name ${{ env.CONTAINER_NAME }} \
-            --restart unless-stopped \
-            -p ${{ env.API_PORT }}:8080 \
-            -e ASPNETgateway_ENVIRONMENT=Development \
-            -v "$(pwd)/logs:/app/logs" \
-            --network bridge \
-            ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
+          # Set environment variables
+          export ASPNETCORE_ENVIRONMENT=Development
+          export ASPNETCORE_URLS=http://localhost:${{ env.API_PORT }}
           
-          # Display container info
-          echo "Container started with ID: $(docker ps -q -f name=${{ env.CONTAINER_NAME }})"
+          # Start application in background
+          cd ${{ env.PUBLISH_PATH }}
+          nohup dotnet Ecom.Gateway.API.dll > ../logs/app.log 2>&1 &
+          
+          # Get process ID
+          APP_PID=$!
+          echo "Application started with PID: $APP_PID"
+          echo $APP_PID > ../app.pid
+          
+          # Wait a moment for startup
+          sleep 10
 
-      - name: "Show Container Status"
+      - name: "Verify Deployment"
+        run: |
+          # Check if application is running
+          if [ -f "./app.pid" ]; then
+            APP_PID=$(cat ./app.pid)
+            if kill -0 $APP_PID 2>/dev/null; then
+              echo "✅ Application is running (PID: $APP_PID)"
+            else
+              echo "❌ Application failed to start"
+              exit 1
+            fi
+          else
+            echo "❌ PID file not found"
+            exit 1
+          fi
+
+      - name: "Show Application Status"
         run: |
           echo "🚀 Development deployment completed!"
           echo ""
-          echo "Docker Container Status:"
-          docker ps --filter "name=${{ env.CONTAINER_NAME }}"
+          echo "Application Status:"
+          if [ -f "./app.pid" ]; then
+            APP_PID=$(cat ./app.pid)
+            ps -p $APP_PID -o pid,ppid,cmd --no-headers
+          fi
           echo ""
-          echo "Container Logs:"
-          docker logs --tail 20 ${{ env.CONTAINER_NAME }}
+          echo "Recent Logs:"
+          tail -20 ./logs/app.log
           echo ""
           echo "Service URLs:"
           echo "  • API: http://localhost:${{ env.API_PORT }}"
@@ -135,8 +162,12 @@ jobs:
 
           # Compress old logs (older than 7 days)
           find ./logs/archive -name "*.txt" -mtime +7 -exec gzip {} \; 2>/dev/null || true
+          find ./logs/archive -name "*.log" -mtime +7 -exec gzip {} \; 2>/dev/null || true
 
-      - name: "Cleanup Docker Images"
+      - name: "Cleanup Build Artifacts"
         run: |
-          # Remove dangling images
-          docker image prune -f
+          # Remove old publish directories
+          find . -name "publish" -type d -mtime +3 -exec rm -rf {} \; 2>/dev/null || true
+          
+          # Clean up temporary files
+          rm -f ./app.pid 2>/dev/null || true
