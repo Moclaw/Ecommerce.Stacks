@@ -13,7 +13,7 @@ env:
   DOCKER_IMAGE: "ecom-gateway-api"
   DOCKER_TAG: "latest"
   CONTAINER_NAME: "ecom-gateway-api-container"
-  API_PORT: 5504
+  API_PORT: 5500
 
 jobs:
   # ==========================================
