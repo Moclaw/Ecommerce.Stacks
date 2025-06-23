@@ -1,9 +1,3 @@
-using Serilog;
-using System.Text;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using Microsoft.AspNetCore.DataProtection;
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure Serilog
