@@ -29,24 +29,6 @@ var healthChecks = builder.Services
         () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy()
     );
 
-try
-{
-    healthChecks
-        .AddUrlGroup(
-            new Uri("http://localhost:5502/health"),
-            "core-api-local",
-            tags: ["services"]
-        )
-        .AddUrlGroup(
-            new Uri("http://localhost:5504/health"),
-            "users-api-local",
-            tags: ["services"]
-        );
-}
-catch (Exception ex)
-{
-    Log.Warning("Could not add service health checks: {Message}", ex.Message);
-}
 // Add HTTP client
 builder.Services.AddHttpClient();
 
@@ -83,12 +65,16 @@ try
 {
     var urls = app.Configuration["ASPNETCORE_URLS"] ?? "http://localhost:5500";
     Log.Information("Starting Ecommerce Gateway API with URLs: {Urls}", urls);
-    
+
     // Log environment information
     var environment = app.Environment.EnvironmentName;
     var isContainer = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true";
-    Log.Information("Environment: {Environment}, Container: {IsContainer}", environment, isContainer);
-    
+    Log.Information(
+        "Environment: {Environment}, Container: {IsContainer}",
+        environment,
+        isContainer
+    );
+
     app.Run();
 }
 catch (Exception ex)
