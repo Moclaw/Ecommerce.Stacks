@@ -160,12 +160,12 @@ jobs:
             --name ${{ env.DOCKER_IMAGE }}-container \
             --restart unless-stopped \
             -p 5500:5500 \
-            -e ASPNETCORE_ENVIRONMENT=Production \
+            -e ASPNETCORE_ENVIRONMENT=Development \
             -e ASPNETCORE_URLS="http://+:5500" \
             -e DOTNET_RUNNING_IN_CONTAINER=true \
             -e DataProtection__UseInMemoryStorage=true \
             -v "$(pwd)/logs:/app/logs" \
-            -v "$(pwd)/config/appsettings.Production.json:/app/appsettings.Production.json:ro" \
+            -v "$(pwd)/config/appsettings.Development.json:/app/appsettings.Development.json:ro" \
             --add-host=host.docker.internal:host-gateway \
             ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
           
