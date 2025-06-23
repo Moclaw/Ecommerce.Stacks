@@ -55,6 +55,13 @@ jobs:
         run: |
           dotnet publish ${{ env.APP_PATH }} --configuration Release --output ${{ env.PUBLISH_PATH }} --no-build
 
+      - name: "Upload Published App"
+        uses: actions/upload-artifact@v4
+        with:
+          name: published-app
+          path: ${{ env.PUBLISH_PATH }}
+          retention-days: 1
+
   # ==========================================
   # DEPLOY JOB
   # ==========================================
@@ -66,6 +73,12 @@ jobs:
     steps:
       - name: "Checkout Code"
         uses: actions/checkout@v4
+
+      - name: "Download Published App"
+        uses: actions/download-artifact@v4
+        with:
+          name: published-app
+          path: ${{ env.PUBLISH_PATH }}
 
       - name: "Setup Environment"
         run: |
@@ -96,6 +109,12 @@ jobs:
           # Set environment variables
           export ASPNETCORE_ENVIRONMENT=Development
           export ASPNETCORE_URLS=http://localhost:${{ env.API_PORT }}
+          
+          # Verify publish directory exists
+          if [ ! -d "${{ env.PUBLISH_PATH }}" ]; then
+            echo "❌ Publish directory not found!"
+            exit 1
+          fi
           
           # Start application in background
           cd ${{ env.PUBLISH_PATH }}
