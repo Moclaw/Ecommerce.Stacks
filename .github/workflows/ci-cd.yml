@@ -1,26 +1,10 @@
-name: "CI/CD Pipeline - Gateway Service"
+name: "CI/CD Pipeline - gateway Service"
 
 on:
   push:
-    branches: 
-      - main
-      - develop
-    paths:
-      - 'src/**'
-      - 'Dockerfile'
-      - '*.csproj'
-      - '*.sln'
-      - '.github/workflows/**'
+    branches: [main, develop]
   pull_request:
-    branches: 
-      - main
-      - develop
-    paths:
-      - 'src/**'
-      - 'Dockerfile'
-      - '*.csproj'
-      - '*.sln'
-      - '.github/workflows/**'
+    branches: [main, develop]
   workflow_dispatch:
 
 env:
@@ -29,7 +13,7 @@ env:
   DOCKER_IMAGE: "ecom-gateway-api"
   DOCKER_TAG: "latest"
   CONTAINER_NAME: "ecom-gateway-api-container"
-  API_PORT: 5500
+  API_PORT: 5504
 
 jobs:
   # ==========================================
@@ -40,16 +24,10 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: "Cleanup Workspace"
-        run: |
-          # Remove any files with permission issues from previous runs
-          sudo rm -rf config/ logs/ || true
-          
       - name: "Checkout Code"
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          clean: true
 
       - name: "Setup .NET"
         uses: actions/setup-dotnet@v4
@@ -87,15 +65,8 @@ jobs:
     needs: build-and-test
 
     steps:
-      - name: "Cleanup Workspace"
-        run: |
-          # Remove any files with permission issues from previous runs
-          sudo rm -rf config/ logs/ || true
-          
       - name: "Checkout Code"
         uses: actions/checkout@v4
-        with:
-          clean: true
 
       - name: "Setup Environment"
         run: |
@@ -122,7 +93,7 @@ jobs:
             --name ${{ env.CONTAINER_NAME }} \
             --restart unless-stopped \
             -p ${{ env.API_PORT }}:80 \
-            -e ASPNETCORE_ENVIRONMENT=Development \
+            -e ASPNETgateway_ENVIRONMENT=Development \
             -v "$(pwd)/logs:/app/logs" \
             --network bridge \
             ${{ env.DOCKER_IMAGE }}:${{ env.DOCKER_TAG }}
@@ -141,7 +112,7 @@ jobs:
           docker logs --tail 20 ${{ env.CONTAINER_NAME }}
           echo ""
           echo "Service URLs:"
-          echo "  • API Gateway: http://localhost:${{ env.API_PORT }}"
+          echo "  • API: http://localhost:${{ env.API_PORT }}"
           echo "  • Swagger UI: http://localhost:${{ env.API_PORT }}/swagger"
 
   # ==========================================
@@ -169,6 +140,3 @@ jobs:
         run: |
           # Remove dangling images
           docker image prune -f
-          
-          # Remove unused containers
-          docker container prune -f
