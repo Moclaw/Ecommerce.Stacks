@@ -29,43 +29,24 @@ var healthChecks = builder.Services
         () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy()
     );
 
-// Add service health checks only in production or if services are available
-if (!builder.Environment.IsDevelopment())
+try
 {
     healthChecks
         .AddUrlGroup(
-            new Uri("http://ecom.core.api/health"),
-            "core-api",
+            new Uri("http://localhost:5502/health"),
+            "core-api-local",
             tags: ["services"]
         )
         .AddUrlGroup(
-            new Uri("http://ecom.users.api/health"),
-            "users-api",
+            new Uri("http://localhost:5504/health"),
+            "users-api-local",
             tags: ["services"]
         );
 }
-else
-{ // In development, try to connect to local services if available
-    try
-    {
-        healthChecks
-            .AddUrlGroup(
-                new Uri("http://localhost:5502/health"),
-                "core-api-local",
-                tags: ["services"]
-            )
-            .AddUrlGroup(
-                new Uri("http://localhost:5504/health"),
-                "users-api-local",
-                tags: ["services"]
-            );
-    }
-    catch (Exception ex)
-    {
-        Log.Warning("Could not add service health checks: {Message}", ex.Message);
-    }
+catch (Exception ex)
+{
+    Log.Warning("Could not add service health checks: {Message}", ex.Message);
 }
-
 // Add HTTP client
 builder.Services.AddHttpClient();
 
@@ -73,29 +54,6 @@ builder.Services.AddHttpClient();
 builder.Services
     .AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
-
-// Add Authentication
-var jwtKey = builder.Configuration["Jwt:Key"] ?? "your-256-bit-secret-key-here-make-it-secure";
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "moclaw-gateway";
-var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "moclaw-api";
-
-builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = true,
-            ValidateAudience = true,
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = jwtIssuer,
-            ValidAudience = jwtAudience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
-        };
-    });
-
-builder.Services.AddAuthorization();
 
 // Add CORS
 builder.Services.AddCors(options =>
@@ -107,13 +65,6 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
-
-// Configure the HTTP request pipeline
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
 
 app.UseCors();
 app.UseAuthentication();
