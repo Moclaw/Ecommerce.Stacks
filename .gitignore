@@ -166,6 +166,5 @@ localstack-data/
 *.pfx
 
 # Application secrets
-appsettings.*.json
 !appsettings.json
 secrets.json
