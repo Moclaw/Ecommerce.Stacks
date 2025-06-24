@@ -26,7 +26,7 @@ var healthChecks = builder.Services
 // Add HTTP client
 builder.Services.AddHttpClient();
 
-// Add YARP
+// Add YARP - simplified configuration
 builder.Services
     .AddReverseProxy()
     .LoadFromConfig(builder.Configuration.GetSection("ReverseProxy"));
@@ -42,7 +42,15 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Configure middleware pipeline
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
 app.UseCors();
+app.UseRouting();
 app.UseAuthentication();
 app.UseAuthorization();
 
