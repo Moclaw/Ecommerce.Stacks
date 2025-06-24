@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          
+
       - name: "Setup .NET"
         uses: actions/setup-dotnet@v4
         with:
@@ -79,20 +79,6 @@ jobs:
         with:
           name: published-app
           path: ${{ env.PUBLISH_PATH }}
-
-      - name: "Ensure .NET is Available"
-        run: |
-          # Ensure .NET is in PATH for deployment
-          if ! command -v dotnet &> /dev/null; then
-            export PATH="$HOME/.dotnet:$PATH"
-            echo 'export PATH="$HOME/.dotnet:$PATH"' >> ~/.bashrc
-          fi
-          
-          # Verify .NET is available
-          dotnet --version || {
-            echo "❌ .NET not found in PATH"
-            exit 1
-          }
 
       - name: "Setup Environment"
         run: |
