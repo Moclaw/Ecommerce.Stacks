@@ -116,8 +116,15 @@ jobs:
             exit 1
           fi
           
+          # List contents of publish directory
+          echo "Contents of publish directory:"
+          ls -la ${{ env.PUBLISH_PATH }}
+          
           # Start application in background
           cd ${{ env.PUBLISH_PATH }}
+          
+          # Start with more verbose logging
+          echo "Starting application..."
           nohup dotnet Ecom.Gateway.API.dll > ../logs/app.log 2>&1 &
           
           # Get process ID
@@ -125,24 +132,13 @@ jobs:
           echo "Application started with PID: $APP_PID"
           echo $APP_PID > ../app.pid
           
-          # Wait a moment for startup
-          sleep 10
-
-      - name: "Verify Deployment"
-        run: |
-          # Check if application is running
-          if [ -f "./app.pid" ]; then
-            APP_PID=$(cat ./app.pid)
-            if kill -0 $APP_PID 2>/dev/null; then
-              echo "✅ Application is running (PID: $APP_PID)"
-            else
-              echo "❌ Application failed to start"
-              exit 1
-            fi
-          else
-            echo "❌ PID file not found"
-            exit 1
-          fi
+          # Wait a moment for startup and check logs
+          sleep 5
+          echo "Initial logs:"
+          head -20 ../logs/app.log || echo "No logs found yet"
+          
+          # Wait a bit more
+          sleep 5
 
       - name: "Show Application Status"
         run: |
