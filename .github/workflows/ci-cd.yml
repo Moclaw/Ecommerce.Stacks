@@ -27,28 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: "Check and Install .NET"
-        run: |
-          # Check if dotnet is installed
-          if ! command -v dotnet &> /dev/null; then
-            echo ".NET not found. Installing .NET ${{ env.DOTNET_VERSION }}..."
-            
-            # Download and install .NET
-            wget https://dot.net/v1/dotnet-install.sh -O dotnet-install.sh
-            chmod +x dotnet-install.sh
-            ./dotnet-install.sh --version ${{ env.DOTNET_VERSION }} --install-dir ~/.dotnet
-            
-            # Add to PATH
-            export PATH="$HOME/.dotnet:$PATH"
-            echo 'export PATH="$HOME/.dotnet:$PATH"' >> ~/.bashrc
-            
-            # Verify installation
-            dotnet --version
-          else
-            echo ".NET is already installed: $(dotnet --version)"
-          fi
-
+          
       - name: "Setup .NET"
         uses: actions/setup-dotnet@v4
         with:
