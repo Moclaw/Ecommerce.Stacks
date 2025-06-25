@@ -1,31 +1,28 @@
-# 🛒 Ecommerce Stacks - Microservices Infrastructure
+# 🛒 Ecommerce Stacks - API Gateway Service
 
-Dự án này cung cấp một stack đầy đủ cho hệ thống ecommerce với các công nghệ hiện đại sử dụng Docker Compose và .NET Core API Gateway.
+This project provides an API Gateway service for an ecommerce microservices architecture built with .NET 9.0 and modern technologies.
 
 ## 🏗️ Tech Stack
 
-### Backend Services
-
-- **API Gateway** - .NET 9.0 with YARP (Yet Another Reverse Proxy)
-- **JWT Authentication** - Security layer cho API Gateway
+### API Gateway Service
+- **.NET 9.0** - Latest .NET framework
+- **YARP (Yet Another Reverse Proxy)** - High-performance reverse proxy
 - **Serilog** - Structured logging framework
+- **JWT Bearer Authentication** - Security layer
+- **Health Checks** - Service monitoring
+- **Swagger/OpenAPI** - API documentation
 
-### Core Infrastructure Services
-
-- **PostgreSQL** - Relational Database (latest)
-- **MongoDB** - NoSQL Database (latest)  
-- **Redis** - In-Memory Cache & Session Store (latest)
-- **Apache Kafka** - Message Broker & Event Streaming (latest)
-- **LocalStack** - AWS Services Emulator (latest)
-
-### Supporting Services
-- **Zookeeper** - Kafka Coordination Service
+### Development & Deployment
+- **GitHub Actions** - CI/CD pipeline with self-hosted runner
+- **Systemd** - Linux service management
+- **Docker** - Containerization support
 
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Docker Desktop
-- Docker Compose V2
+- .NET 9.0 SDK
+- Visual Studio 2022 or VS Code
+- Docker Desktop (optional)
 
 ### 1. Clone & Setup
 ```bash
@@ -34,294 +31,297 @@ cd Ecommerce.Stacks
 ```
 
 ### 2. Environment Configuration
-Cấu hình các biến môi trường trong file `.env`:
-```env
-# PostgreSQL
-POSTGRES_DB=ecommerce_db
-POSTGRES_USER=ecommerce_user
-POSTGRES_PASSWORD=ecommerce_password
-
-# MongoDB
-MONGO_INITDB_ROOT_USERNAME=admin
-MONGO_INITDB_ROOT_PASSWORD=admin_password
-
-# Redis
-REDIS_PASSWORD=redis_password
-
-# Kafka
-KAFKA_PORT=9092
-
-# LocalStack
-LOCALSTACK_SERVICES=s3,sqs,sns,dynamodb,lambda,apigateway
-```
-
-### 3. Start Services
-```bash
-# Start tất cả services
-docker-compose up -d
-
-# Hoặc start từng service cụ thể
-docker-compose up -d postgres mongodb redis
-```
-
-### 4. Verify Services
-```bash
-# Kiểm tra trạng thái các container
-docker-compose ps
-
-# Xem logs
-docker-compose logs -f [service-name]
-```
-
-## 📊 Management Interfaces
-
-Sau khi start thành công, bạn có thể truy cập các giao diện quản lý:
-
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| **LocalStack** | http://localhost:4566 | AWS CLI endpoint |
-
-## 🔌 Service Endpoints
-
-### Database Connections
+The gateway is configured to route to these services:
 ```yaml
-# PostgreSQL
-Host: localhost
-Port: 5432
-Database: ecommerce_db
-Username: ecommerce_user
-Password: ecommerce_password
+# Core API Service
+http://localhost:5504/
 
-# MongoDB
-Connection String: mongodb://admin:admin_password@localhost:27017/ecommerce_mongo
-
-# Redis
-Host: localhost
-Port: 6379
-Password: redis_password
+# Users API Service  
+http://localhost:5502/
 ```
 
-### Message Broker
-```yaml
-# Kafka Bootstrap Server
-localhost:9092
-
-# Zookeeper
-localhost:2181
-```
-
-### AWS Services (LocalStack)
+### 3. Run the Gateway
 ```bash
-# AWS CLI Configuration
-aws configure set aws_access_key_id test
-aws configure set aws_secret_access_key test
-aws configure set region us-east-1
-aws configure set output json
-
-# Endpoint URL
---endpoint-url=http://localhost:4566
-```
-
-## 🗂️ Project Structure
-
-```
-Ecommerce.Stacks/
-├── docker-compose.yml          # Service definitions
-├── .env                        # Environment variables
-├── README.md                   # Documentation
-├── Ecommerce.Stacks.sln       # .NET Solution file
-├── src/                       # Source code
-│   └── Ecom.Gateway.API/      # API Gateway (.NET 9.0)
-│       ├── Controllers/       # API Controllers
-│       ├── Properties/        # Project properties
-│       ├── appsettings.json   # Configuration
-│       ├── Program.cs         # Application entry point
-│       ├── Dockerfile         # Docker image definition
-│       └── logs/             # Application logs
-└── data/                     # Persistent data (auto-created)
-    ├── postgres/
-    ├── mongo/
-    ├── redis/
-    ├── kafka/
-    └── localstack/
-```
-
-## 🚀 API Gateway
-
-The project includes a .NET 9.0 API Gateway built with:
-
-- **YARP (Yet Another Reverse Proxy)** - For reverse proxy functionality
-- **JWT Bearer Authentication** - For securing API endpoints
-- **Serilog** - For structured logging
-- **Health Checks** - For monitoring service health
-- **Swagger/OpenAPI** - For API documentation
-
-### Gateway Endpoints
-
-```
-http://localhost:5000          # API Gateway (HTTP)
-http://localhost:5001          # API Gateway (HTTPS)
-http://localhost:5000/swagger  # API Documentation
-```
-
-### Running the Gateway
-
-```bash
-# Using Docker
-docker-compose up -d gateway
-
 # Using .NET CLI
 cd src/Ecom.Gateway.API
 dotnet run
 
 # Using Visual Studio
 # Open Ecommerce.Stacks.sln and run the project
+
+# Using Docker
+docker build -t ecom-gateway .
+docker run -p 5500:5500 ecom-gateway
 ```
 
-## 💡 Usage Examples
-
-### PostgreSQL
-```sql
--- Connect và tạo bảng mẫu
-CREATE TABLE products (
-    id SERIAL PRIMARY KEY,
-    name VARCHAR(255) NOT NULL,
-    price DECIMAL(10,2),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-### MongoDB
-```javascript
-// Connect và tạo collection
-use ecommerce_mongo
-db.users.insertOne({
-    name: "John Doe",
-    email: "john@example.com",
-    createdAt: new Date()
-})
-```
-
-### Redis
+### 4. Verify Service
 ```bash
-# Test Redis connection
-redis-cli -h localhost -p 6379 -a redis_password
-> SET user:1 "John Doe"
-> GET user:1
+# Check gateway health
+curl http://localhost:5500/health
+
+# Get gateway info
+curl http://localhost:5500/api/gateway/info
+
+# Access Swagger UI
+# Open http://localhost:5500/swagger in browser
 ```
 
-### Kafka
-```bash
-# Tạo topic
-docker exec ecommerce-kafka kafka-topics --create --topic orders --bootstrap-server localhost:9092
+## 🔌 Service Endpoints
 
-# Producer
-docker exec -it ecommerce-kafka kafka-console-producer --topic orders --bootstrap-server localhost:9092
-
-# Consumer
-docker exec -it ecommerce-kafka kafka-console-consumer --topic orders --from-beginning --bootstrap-server localhost:9092
+### Gateway Endpoints
+```
+http://localhost:5500          # API Gateway (HTTP)
+http://localhost:5500/swagger  # API Documentation
+http://localhost:5500/health   # Health Check
+http://localhost:5500/api/gateway/info  # Gateway Information
 ```
 
-### LocalStack (AWS S3)
-```bash
-# Tạo S3 bucket
-aws --endpoint-url=http://localhost:4566 s3 mb s3://ecommerce-bucket
+### Proxy Routes
+```yaml
+# Core API Routes
+/api/core/**  → http://localhost:5504/api/**
 
-# Upload file
-aws --endpoint-url=http://localhost:4566 s3 cp file.txt s3://ecommerce-bucket/
-
-# List objects
-aws --endpoint-url=http://localhost:4566 s3 ls s3://ecommerce-bucket/
+# Users API Routes  
+/api/users/** → http://localhost:5502/api/**
 ```
 
-## 🔧 Common Commands
+## 🗂️ Project Structure
 
-### Service Management
+```
+Ecommerce.Stacks/
+├── .github/
+│   └── workflows/
+│       └── ci-cd.yml              # CI/CD Pipeline
+├── src/
+│   └── Ecom.Gateway.API/          # API Gateway (.NET 9.0)
+│       ├── Controllers/
+│       │   └── GatewayController.cs
+│       ├── Properties/
+│       │   └── launchSettings.json
+│       ├── appsettings.json       # Production config
+│       ├── appsettings.Development.json
+│       ├── Program.cs             # Application entry point
+│       ├── Ecom.Gateway.API.csproj
+│       └── logs/                  # Application logs (auto-created)
+├── Ecommerce.Stacks.sln          # .NET Solution file
+└── README.md                     # This file
+```
+
+## 🚀 API Gateway Features
+
+### Reverse Proxy Configuration
+- **YARP Integration** - High-performance proxy with load balancing
+- **Health Checks** - Active health monitoring for backend services
+- **Path Transformation** - Intelligent routing and path rewriting
+- **CORS Support** - Cross-origin resource sharing enabled
+
+### Logging & Monitoring
+- **Structured Logging** - JSON-based logs with Serilog
+- **File & Console Logging** - Dual output for debugging and monitoring
+- **Health Check Endpoints** - Built-in health monitoring
+- **Request Tracing** - Detailed request/response logging
+
+### Security
+- **JWT Bearer Authentication** - Ready for token-based security
+- **CORS Configuration** - Flexible cross-origin policies
+- **HTTPS Support** - SSL/TLS termination capability
+
+## 🔧 Configuration
+
+### Environment-Specific Settings
+
+**Development (appsettings.Development.json):**
+```json
+{
+  "Kestrel": {
+    "Endpoints": {
+      "Http": {
+        "Url": "http://+:5500"
+      }
+    }
+  }
+}
+```
+
+**Docker Configuration:**
+```yaml
+# Container ports
+ASPNETCORE_HTTPS_PORTS: "8081"
+ASPNETCORE_HTTP_PORTS: "8080"
+```
+
+### Adding New Routes
+To add a new microservice route, update `appsettings.json`:
+
+```json
+{
+  "ReverseProxy": {
+    "Routes": {
+      "new-service-route": {
+        "ClusterId": "new-service-cluster",
+        "Match": {
+          "Path": "/api/newservice/{**catch-all}"
+        },
+        "Transforms": [
+          { "PathPattern": "/api/{**catch-all}" }
+        ]
+      }
+    },
+    "Clusters": {
+      "new-service-cluster": {
+        "Destinations": {
+          "destination1": {
+            "Address": "http://localhost:5505/"
+          }
+        },
+        "HealthCheck": {
+          "Active": {
+            "Enabled": "true",
+            "Interval": "00:00:30",
+            "Timeout": "00:00:05",
+            "Policy": "ConsecutiveFailures",
+            "Path": "/health"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+## 🚀 CI/CD Pipeline
+
+The project includes a complete GitHub Actions pipeline for:
+
+### Build & Test
+- **Automated Builds** - .NET 9.0 compilation and testing
+- **NuGet Caching** - Faster builds with dependency caching
+- **Artifact Management** - Build output preservation
+
+### Deployment
+- **Self-Hosted Runner** - Direct deployment to development server
+- **Systemd Integration** - Linux service management
+- **Zero-Downtime Deployment** - Graceful service updates
+- **Health Monitoring** - Post-deployment verification
+
+### Service Management Commands
 ```bash
-# Start specific services
-docker-compose up -d postgres redis
+# Check service status
+sudo systemctl status ecommerce-gateway
 
-# Stop all services
-docker-compose down
-
-# Stop and remove volumes
-docker-compose down -v
+# View real-time logs
+sudo journalctl -u ecommerce-gateway -f
 
 # Restart service
-docker-compose restart kafka
+sudo systemctl restart ecommerce-gateway
 
-# View logs
-docker-compose logs -f postgres
+# Stop/Start service
+sudo systemctl stop ecommerce-gateway
+sudo systemctl start ecommerce-gateway
 ```
 
-### Health Checks
+## 💡 Development Tips
+
+### Local Development
+1. **Hot Reload** - Use `dotnet watch run` for development
+2. **Environment Variables** - Set `ASPNETCORE_ENVIRONMENT=Development`
+3. **Logging** - Check `logs/gateway-.txt` for application logs
+4. **Health Checks** - Monitor `/health` endpoint for service status
+
+### Debugging
 ```bash
-# Check all containers status
-docker-compose ps
+# Enable detailed logging
+export ASPNETCORE_ENVIRONMENT=Development
 
-# Check specific service health
-docker-compose exec postgres pg_isready
-docker-compose exec mongodb mongosh --eval "db.adminCommand('ping')"
-docker-compose exec redis redis-cli ping
+# Check application logs
+tail -f src/Ecom.Gateway.API/logs/gateway-*.txt
+
+# Monitor health checks
+curl -w "\n%{http_code}\n" http://localhost:5500/health
 ```
 
-### Data Management
-```bash
-# Backup PostgreSQL
-docker-compose exec postgres pg_dump -U ecommerce_user ecommerce_db > backup.sql
-
-# Backup MongoDB
-docker-compose exec mongodb mongodump --uri="mongodb://admin:admin_password@localhost:27017/ecommerce_mongo"
-
-# Clear all data (⚠️ DESTRUCTIVE)
-docker-compose down -v
-```
+### Performance Monitoring
+- Monitor proxy performance through YARP metrics
+- Check backend service health via active health checks
+- Use structured logs for request tracing
 
 ## 🐛 Troubleshooting
 
 ### Common Issues
 
-**Port conflicts:**
+**Port 5500 already in use:**
 ```bash
-# Check port usage
-netstat -ano | findstr :5432
+# Find process using port
+netstat -ano | findstr :5500
+# Kill process or change port in appsettings.json
 ```
 
-**Memory issues:**
+**Backend services not responding:**
+- Verify target services are running on configured ports
+- Check health check logs in application logs
+- Ensure firewall allows connections
+
+**Logging issues:**
+- Verify `logs/` directory permissions
+- Check disk space for log files
+- Review Serilog configuration in appsettings.json
+
+### Health Check Failures
 ```bash
-# Increase Docker memory limit in Docker Desktop settings
-# Recommended: 4GB+ RAM
+# Check individual backend health
+curl http://localhost:5502/health  # Users service
+curl http://localhost:5504/health  # Core service
+
+# Check gateway routing
+curl -v http://localhost:5500/api/users/test
+curl -v http://localhost:5500/api/core/test
 ```
 
-**Permission issues:**
-```bash
-# On Windows, ensure Docker Desktop is running as Administrator
-# On Linux, add user to docker group
-sudo usermod -aG docker $USER
-```
+## 🔄 Service Integration
 
-### Service-specific Issues
+### Adding New Microservices
+1. Update `appsettings.json` with new routes and clusters
+2. Ensure the new service has a `/health` endpoint
+3. Update the CI/CD pipeline if needed
+4. Test routing with curl or Postman
 
-**PostgreSQL connection failed:**
-- Verify credentials in `.env`
-- Check if port 5432 is available
-- Wait for health check to pass
+### Service Discovery
+The gateway currently uses static configuration. For dynamic service discovery:
+- Consider integrating with Consul or etcd
+- Implement service registry pattern
+- Add automatic route configuration
 
-**Kafka not starting:**
-- Ensure Zookeeper is running first
-- Check if ports 9092/2181 are available
-- Increase memory allocation
+## 🤝 Contributing
 
-**LocalStack issues:**
-- Verify Docker socket mounting
-- Check LocalStack logs for service startup
-- Ensure required AWS CLI version
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/new-feature`)
+3. Make your changes
+4. Test thoroughly (unit tests + integration tests)
+5. Update documentation if needed
+6. Submit a pull request
 
-## 📝 Development Tips
+### Code Standards
+- Follow .NET coding conventions
+- Add XML documentation for public APIs
+- Include unit tests for new features
+- Update appsettings for configuration changes
 
-1. **Environment Isolation**: Mỗi service chạy trong container riêng biệt
-2. **Data Persistence**: Tất cả data được lưu trong Docker volumes
-3. **Service Discovery**: Các service có thể communicate qua container names
+## 📄 License
+
+This project is licensed under the MIT License.
+
+---
+
+**Happy Coding! 🚀**
+
+For issues or questions, please create an issue in the repository or contact the development team.
+
+### Next Steps
+- Add authentication middleware
+- Implement rate limiting
+- Add monitoring dashboard
+- Create additional microservices
+- Set up production deployment pipeline
 4. **Health Monitoring**: Tất cả services có health checks
 5. **Scalability**: Có thể scale từng service độc lập
 
